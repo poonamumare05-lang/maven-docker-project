@@ -17,32 +17,46 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
+        stage('Git Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Check Java and Maven') {
+        stage('Java and Maven Version') {
             steps {
                 sh '''
                     java -version
                     mvn -version
+                    docker --version
                 '''
             }
         }
 
-        stage('Maven Build') {
+        stage('Maven Clean Package') {
             steps {
                 sh 'mvn clean package'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Verify WAR') {
             steps {
                 sh '''
-                    docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
-                    docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                    ls -lh target/
+                    test -f target/educationapp.war
+                '''
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    docker build \
+                    -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+
+                    docker tag \
+                    ${DOCKER_IMAGE}:${BUILD_NUMBER} \
+                    ${DOCKER_IMAGE}:latest
                 '''
             }
         }
@@ -58,12 +72,12 @@ pipeline {
                 ]) {
                     sh '''
                         echo "$DOCKER_PASS" | docker login \
-                        -u "$DOCKER_USER" --password-stdin
+                        --username "$DOCKER_USER" \
+                        --password-stdin
 
                         docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
-                        docker push ${DOCKER_IMAGE}:latest
 
-                        docker logout
+                        docker push ${DOCKER_IMAGE}:latest
                     '''
                 }
             }
@@ -72,11 +86,11 @@ pipeline {
 
     post {
         success {
-            echo 'SUCCESS: Image pushed to Docker Hub!'
+            echo 'SUCCESS: Maven Build and Docker Hub Push Completed!'
         }
 
         failure {
-            echo 'FAILED: Check Jenkins console output.'
+            echo 'FAILED: Check Console Output.'
         }
 
         always {
